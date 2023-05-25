@@ -19,7 +19,6 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
         goarch: ${{ matrix.goarch }}
-        project_path: "cmd"
-        build_command: "go build -o dbq_server"
+        build_command: "go build cmd/httpserver.go -o dbq_server"
         binary_name: "dbq_server"
   

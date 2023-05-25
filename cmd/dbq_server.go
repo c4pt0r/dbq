@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -181,7 +182,7 @@ func pushMsgHandler(c *gin.Context) {
 	// get data from body
 	data, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		handleError(c, http.StatusBadRequest, "Invalid payload")
+		handleError(c, http.StatusBadRequest, fmt.Sprintf("Failed to read request body: %s", err.Error()))
 		return
 	}
 	// create a new message
@@ -191,6 +192,47 @@ func pushMsgHandler(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse{
 			Success: true,
 			Payload: message.ID,
+		})
+	} else {
+		handleError(c, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func mpushMsgHandler(c *gin.Context) {
+	name := c.Param("name")
+	q := &dbq.Q{Name: name}
+	// get data from body
+	data, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		handleError(c, http.StatusBadRequest, fmt.Sprintf("Failed to read request body: %s", err.Error()))
+		return
+	}
+
+	var messageDatas [][]byte
+	if err := json.Unmarshal(data, &messageDatas); err != nil {
+		handleError(c, http.StatusBadRequest, fmt.Sprintf("Failed to unmarshal messages: %s", err.Error()))
+		return
+	}
+
+	if len(messageDatas) == 0 || len(messageDatas) > 1000 {
+		handleError(c, http.StatusBadRequest, fmt.Sprintf("Invalid number of messages (0, 1000): %d", len(messageDatas)))
+		return
+	}
+
+	var msgs []*dbq.Msg
+	var msgIDs []int64
+	for _, msgData := range messageDatas {
+		// create a new message
+		message := dbq.NewMsg(msgData)
+		message.ID = GenerateID()
+		msgs = append(msgs, message)
+		msgIDs = append(msgIDs, message.ID)
+	}
+
+	if err := q.Push(msgs); err == nil {
+		c.JSON(http.StatusOK, APIResponse{
+			Success: true,
+			Payload: msgIDs,
 		})
 	} else {
 		handleError(c, http.StatusInternalServerError, err.Error())
@@ -210,6 +252,23 @@ func pullMsgsHandler(c *gin.Context) {
 		c.JSON(http.StatusOK, APIResponse{
 			Success: true,
 			Payload: messages,
+		})
+	} else {
+		handleError(c, http.StatusInternalServerError, err.Error())
+	}
+}
+
+// return number of pending messages from a Q
+func pendingMsgsHandler(c *gin.Context) {
+	name := c.Param("name")
+	q := &dbq.Q{Name: name}
+	ret, err := q.NumPending()
+	if err == nil {
+		c.JSON(http.StatusOK, APIResponse{
+			Success: true,
+			Payload: struct {
+				Pending int `json:"num_pending_msgs"`
+			}{ret},
 		})
 	} else {
 		handleError(c, http.StatusInternalServerError, err.Error())
@@ -326,7 +385,9 @@ func main() {
 	r.POST("/q/:name", createQHandler)
 	r.DELETE("/q/:name", deleteQHandler)
 	r.POST("/q/:name/push", pushMsgHandler)
+	r.POST("/q/:name/mpush", mpushMsgHandler)
 	r.GET("/q/:name/pull", pullMsgsHandler)
+	r.GET("/q/:name/pending", pendingMsgsHandler)
 	r.GET("/q/:name/msg/:id", getMsgHandler)
 	r.PUT("/q/:name/msg/:id", updateMsgHandler)
 	r.DELETE("/q/:name/truncate", clearQHandler)

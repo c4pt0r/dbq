@@ -177,7 +177,8 @@ func (q *Q) pull(limit int, dryrun bool) ([]*Msg, error) {
 
 	stmt := fmt.Sprintf(`
 		SELECT 
-			id, data, status, ret_code, progress, ret_data, error_msg, created_at, schedule_at, updated_at
+			id, data, status, ret_code, progress, ret_data, error_msg, 
+			created_at, schedule_at, updated_at
 		FROM 
 			%s
 		WHERE 
@@ -307,6 +308,23 @@ func (q *Q) UpdateMsg(msg *Msg) error {
 	return nil
 }
 */
+
+func (q *Q) NumPending() (int, error) {
+	stmt := fmt.Sprintf(`
+		SELECT 
+			COUNT(*)
+		FROM
+			%s
+		WHERE
+			status = ?
+		`, q.TableName())
+	var count int
+	err := DB().QueryRow(stmt, MsgStatusPending).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
 
 func (q *Q) UpdateMsg(msg *Msg) error {
 	stmt := fmt.Sprintf("UPDATE %s SET", q.TableName())

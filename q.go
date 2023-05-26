@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const MAX_PAYLOAD_SIZE = 1024 * 1024 * 10
+
 type MsgStatus int
 
 const (
@@ -251,7 +253,19 @@ func (q *Q) Pull(limit int) ([]*Msg, error) {
 	return q.pull(limit, false)
 }
 
+// calc rough total size in byte of msgs
+func size(msgs []*Msg) int {
+	s := 0
+	for _, msg := range msgs {
+		s += len(msg.Data)
+	}
+	return s
+}
+
 func (q *Q) Push(msgs []*Msg) error {
+	if size(msgs) > MAX_PAYLOAD_SIZE {
+		return fmt.Errorf("payload size exceeded 10MB")
+	}
 	return q.push(msgs)
 }
 
@@ -282,32 +296,6 @@ func (q *Q) GetMsgByID(id int64) (*Msg, error) {
 	}
 	return msg, nil
 }
-
-/*
-func (q *Q) UpdateMsg(msg *Msg) error {
-	stmt := fmt.Sprintf(`
-		UPDATE
-			%s
-		SET
-			status = ?, ret_code = ?, progress = ?, ret_data = ?, error_msg = ?, updated_at = ?
-		WHERE
-			id = ?
-		`, q.TableName())
-	_, err := DB().Exec(stmt,
-		msg.Status,
-		msg.RetCode,
-		msg.Progress,
-		msg.Ret,
-		msg.Error,
-		time.Now(),
-		msg.ID,
-	)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-*/
 
 func (q *Q) NumPending() (int, error) {
 	stmt := fmt.Sprintf(`

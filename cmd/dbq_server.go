@@ -11,8 +11,9 @@ import (
 	"os"
 	"strconv"
 
-	"dbq"
 	"flag"
+
+	"github.com/c4pt0r/dbq"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bwmarrin/snowflake"
